@@ -157,24 +157,22 @@ static void acpi_dsdt_add_virtio(Aml *scope,
     }
 }
 
-static void acpi_dsdt_add_pci(Aml *scope, const MemMapEntry *memmap,
-                              uint32_t irq, VirtMachineState *vms)
-{
-    int ecam_id = VIRT_ECAM_ID(vms->highmem_ecam);
-    struct GPEXConfig cfg = {
-        .mmio32 = memmap[VIRT_PCIE_MMIO],
-        .pio    = memmap[VIRT_PCIE_PIO],
-        .ecam   = memmap[ecam_id],
-        .irq    = irq,
-        .bus    = vms->bus,
-    };
+// static void acpi_dsdt_add_pci(Aml *scope, const MemMapEntry *memmap,
+//                               uint32_t irq, bool use_highmem, bool highmem_ecam,
+//                               VirtMachineState *vms)
+// {
+//     int ecam_id = VIRT_ECAM_ID(highmem_ecam);
+//     struct GPEXConfig cfg = {
+//         .mmio32 = memmap[VIRT_PCIE_MMIO],
+//         .pio    = memmap[VIRT_PCIE_PIO],
+//         .ecam   = memmap[ecam_id],
+//         .irq    = irq,
+//         .bus    = vms->bus,
+//     };
 
-    if (vms->highmem_mmio) {
-        cfg.mmio64 = memmap[VIRT_HIGH_PCIE_MMIO];
-    }
-
-    acpi_dsdt_add_gpex(scope, &cfg);
-}
+//     if (use_highmem) {
+//         cfg.mmio64 = memmap[VIRT_HIGH_PCIE_MMIO];
+//     }
 
 static void acpi_dsdt_add_gpio(Aml *scope, const MemMapEntry *gpio_memmap,
                                            uint32_t gpio_irq)
@@ -868,7 +866,9 @@ build_dsdt(GArray *table_data, BIOSLinker *linker, VirtMachineState *vms)
     acpi_dsdt_add_fw_cfg(scope, &memmap[VIRT_FW_CFG]);
     acpi_dsdt_add_virtio(scope, &memmap[VIRT_MMIO],
                     (irqmap[VIRT_MMIO] + ARM_SPI_BASE), NUM_VIRTIO_TRANSPORTS);
-    acpi_dsdt_add_pci(scope, memmap, irqmap[VIRT_PCIE] + ARM_SPI_BASE, vms);
+
+    // acpi_dsdt_add_pci(scope, memmap, (irqmap[VIRT_PCIE] + ARM_SPI_BASE),
+    //                   vms->highmem, vms->highmem_ecam, vms);
     if (vms->acpi_dev) {
         build_ged_aml(scope, "\\_SB."GED_DEVICE,
                       HOTPLUG_HANDLER(vms->acpi_dev),
@@ -884,12 +884,8 @@ build_dsdt(GArray *table_data, BIOSLinker *linker, VirtMachineState *vms)
                                                   "ged-event", &error_abort);
 
         if (event & ACPI_GED_MEM_HOTPLUG_EVT) {
-            build_memory_hotplug_aml(scope, ms->ram_slots, "\\_SB", NULL,
-                                     AML_SYSTEM_MEMORY,
-                                     memmap[VIRT_PCDIMM_ACPI].base);
         }
     }
-
     acpi_dsdt_add_power_button(scope);
 #ifdef CONFIG_TPM
     acpi_dsdt_add_tpm(scope, vms);
