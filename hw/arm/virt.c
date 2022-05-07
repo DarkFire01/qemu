@@ -79,6 +79,7 @@
 #include "hw/virtio/virtio-iommu.h"
 #include "hw/char/pl011.h"
 #include "qemu/guest-random.h"
+#include "hw/sd/sdhci.h"
 
 #define DEFINE_VIRT_MACHINE_LATEST(major, minor, latest) \
     static void virt_##major##_##minor##_class_init(ObjectClass *oc, \
@@ -154,6 +155,8 @@ static const MemMapEntry base_memmap[] = {
     [VIRT_NVDIMM_ACPI] =        { 0x09090000, NVDIMM_ACPI_IO_LEN},
     [VIRT_PVTIME] =             { 0x090a0000, 0x00010000 },
     [VIRT_SECURE_GPIO] =        { 0x090b0000, 0x00001000 },
+    [VIRT_EHCI] =               { 0x090c0000, 0x00010000 },
+    [VIRT_SDHCI] =              { 0x090d0000, 0x00010000 },
     [VIRT_MMIO] =               { 0x0a000000, 0x00000200 },
     /* ...repeating for a total of NUM_VIRTIO_TRANSPORTS, each of that size */
     [VIRT_PLATFORM_BUS] =       { 0x0c000000, 0x02000000 },
@@ -190,6 +193,8 @@ static const int a15irqmap[] = {
     [VIRT_GPIO] = 7,
     [VIRT_SECURE_UART] = 8,
     [VIRT_ACPI_GED] = 9,
+    [VIRT_EHCI] = 11,
+    [VIRT_SDHCI] = 12,
     [VIRT_MMIO] = 16, /* ...to 16 + NUM_VIRTIO_TRANSPORTS - 1 */
     [VIRT_GIC_V2M] = 48, /* ...to 48 + NUM_GICV2M_SPIS - 1 */
     [VIRT_SMMU] = 74,    /* ...to 74 + NUM_SMMU_IRQS - 1 */
@@ -1295,6 +1300,44 @@ static void create_pcie_irq_map(const MachineState *ms,
                            0x7           /* PCI irq */);
 }
 
+static void create_ehci(const VirtMachineState *vms)
+{
+    hwaddr base = vms->memmap[VIRT_EHCI].base;
+    int irq = vms->irqmap[VIRT_EHCI];
+
+    sysbus_create_simple("platform-ehci-usb", base,
+                         qdev_get_gpio_in(vms->gic, irq));
+}
+
+static void create_sdhci(const VirtMachineState *vms)
+{
+
+    hwaddr base = vms->memmap[VIRT_SDHCI].base;
+    int irq = vms->irqmap[VIRT_SDHCI];
+    DeviceState *dev;
+    SysBusDevice *busdev;
+    DriveInfo *di;
+    BlockBackend *blk;
+    DeviceState *carddev;
+
+    dev = qdev_new(TYPE_SYSBUS_SDHCI);
+    qdev_prop_set_uint64(dev, "capareg", VIRT_SDHCI_CAPABILITIES);
+
+    busdev = SYS_BUS_DEVICE(dev);
+    sysbus_realize_and_unref(busdev, &error_fatal);
+    sysbus_mmio_map(busdev, 0, base);
+    sysbus_connect_irq(busdev, 0, qdev_get_gpio_in(vms->gic, irq));
+
+
+    di = drive_get_next(IF_SD);
+    blk = di ? blk_by_legacy_dinfo(di) : NULL;
+    carddev = qdev_new(TYPE_SD_CARD);
+    qdev_prop_set_drive(carddev, "drive", blk);
+    qdev_realize_and_unref(carddev, qdev_get_child_bus(dev, "sd-bus"),
+                            &error_fatal);
+
+}
+
 static void create_smmu(const VirtMachineState *vms,
                         PCIBus *bus)
 {
@@ -2210,6 +2253,12 @@ static void machvirt_init(MachineState *machine)
      * no backend is created the transport will just sit harmlessly idle.
      */
     create_virtio_devices(vms);
+
+    /* Create platform EHCI controller device */
+    create_ehci(vms);
+
+    /* Create platform SD host controller device */
+    create_sdhci(vms);
 
     vms->fw_cfg = create_fw_cfg(vms, &address_space_memory);
     rom_set_fw(vms->fw_cfg);
