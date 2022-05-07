@@ -2080,9 +2080,9 @@ static void machvirt_init(MachineState *machine)
 
         aarch64 &= object_property_get_bool(cpuobj, "aarch64", NULL);
 
-        if (!vms->secure) {
-            object_property_set_bool(cpuobj, "has_el3", false, NULL);
-        }
+        /* Enable EL3 even when secure=false, for Windows on ARM 32-Bit
+           Note: proper TrustZone with ATF+EDK2 does not work as of now */
+        object_property_set_bool(cpuobj, "has_el3", true, NULL);
 
         if (!vms->virt && object_property_find(cpuobj, "has_el2")) {
             object_property_set_bool(cpuobj, "has_el2", false, NULL);
