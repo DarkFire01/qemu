@@ -181,10 +181,9 @@ struct VirtMachineState {
 #define VIRT_ECAM_ID(high) (high ? VIRT_HIGH_PCIE_ECAM : VIRT_PCIE_ECAM)
 
 /* 
- * Based on SDHC_CAPAB_REG_DEFAULT 
- * With SDMA/ADMA1/ADMA2 disabled
+ * Copied from SDHC_CAPAB_REG_DEFAULT 
  */
-#define VIRT_SDHCI_CAPABILITIES 0x053034B4
+#define VIRT_SDHCI_CAPABILITIES 0x057834b4
 
 #define TYPE_VIRT_MACHINE   MACHINE_TYPE_NAME("virt")
 OBJECT_DECLARE_TYPE(VirtMachineState, VirtMachineClass, VIRT_MACHINE)
